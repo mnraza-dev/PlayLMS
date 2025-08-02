@@ -6,8 +6,8 @@ dotenv.config();
 
 // Test playlist URLs
 const testPlaylists = [
-  'https://www.youtube.com/playlist?list=PLrAXtmRdnEQy6nuLMH7uaudz8wOPW2JHA',
-  'https://www.youtube.com/playlist?list=PLWKjhJtqVAbnZtkAI3BqcYxKnfWn_C704'
+  'https://www.youtube.com/playlist?list=PLWKjhJtqVAbnZtkAI3BqcYxKnfWn_C704', // Working playlist
+  'https://www.youtube.com/playlist?list=PLrAXtmRdnEQy6nuLMH7uaudz8wOPW2JHA'  // Non-working playlist
 ];
 
 async function testYouTubeService() {

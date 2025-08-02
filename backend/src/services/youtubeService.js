@@ -1,6 +1,9 @@
 import { google } from 'googleapis';
 import axios from 'axios';
+import dotenv from 'dotenv';
 
+// Load environment variables
+dotenv.config();
 class YouTubeService {
   constructor() {
     if (!process.env.YOUTUBE_API_KEY) {
