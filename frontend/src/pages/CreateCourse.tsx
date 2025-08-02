@@ -31,7 +31,9 @@ interface PlaylistPreview {
   thumbnail: string;
   videoCount: number;
   channelTitle: string;
-  videos?: Array<{
+  estimatedDuration: string;
+  estimatedXP: number;
+  sampleVideos?: Array<{
     title: string;
     duration: number;
     thumbnail: string;
@@ -64,7 +66,7 @@ const CreateCourse: React.FC = () => {
     (url: string) => api.post('/courses/preview', { playlistUrl: url }),
     {
       onSuccess: (data) => {
-        setPlaylistPreview(data.data.playlist);
+        setPlaylistPreview(data.data.preview);
         setStep(2);
       },
       onError: (error: any) => {
@@ -251,8 +253,44 @@ const CreateCourse: React.FC = () => {
                       <Play className="h-4 w-4 mr-1" />
                       {playlistPreview.videoCount} videos
                     </div>
+                    <div className="flex items-center">
+                      <Clock className="h-4 w-4 mr-1" />
+                      {playlistPreview.estimatedDuration}
+                    </div>
+                    <div className="flex items-center">
+                      <Star className="h-4 w-4 mr-1" />
+                      {playlistPreview.estimatedXP} XP
+                    </div>
                   </div>
                 </div>
+
+                {/* Sample Videos */}
+                {playlistPreview.sampleVideos && playlistPreview.sampleVideos.length > 0 && (
+                  <div className="mt-6">
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                      Sample Videos
+                    </h4>
+                    <div className="space-y-2">
+                      {playlistPreview.sampleVideos.map((video, index) => (
+                        <div key={index} className="flex items-center space-x-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-700">
+                          <img 
+                            src={video.thumbnail} 
+                            alt={video.title}
+                            className="w-16 h-9 object-cover rounded"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                              {video.title}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {formatDuration(video.duration)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

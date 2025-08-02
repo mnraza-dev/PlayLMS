@@ -65,11 +65,23 @@ router.post('/convert', [
   const { playlistUrl, category, difficulty = 'beginner', tags = [], isPublic = true } = req.body;
 
   try {
-    // Extract playlist ID
-    const playlistId = YouTubeService.extractPlaylistId(playlistUrl);
+    // Use the enhanced YouTube service to create course
+    const result = await YouTubeService.createCourseFromPlaylist(playlistUrl, req.user._id, {
+      category,
+      difficulty,
+      tags,
+      isPublic
+    });
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.error
+      });
+    }
 
     // Check if course already exists
-    const existingCourse = await Course.findOne({ playlistId });
+    const existingCourse = await Course.findOne({ playlistId: result.course.playlistId });
     if (existingCourse) {
       return res.status(400).json({
         success: false,
@@ -77,53 +89,8 @@ router.post('/convert', [
       });
     }
 
-    // Get playlist details
-    const playlistDetails = await YouTubeService.getPlaylistDetails(playlistId);
-
-    // Get playlist videos
-    const videos = await YouTubeService.getPlaylistVideos(playlistId);
-
-    if (videos.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No videos found in playlist'
-      });
-    }
-
-    // Create course modules
-    const modules = videos.map((video, index) => ({
-      title: video.title,
-      description: video.description,
-      videoId: video.id,
-      videoUrl: video.videoUrl,
-      thumbnail: video.thumbnail,
-      duration: video.duration,
-      order: index + 1,
-      xpReward: 10
-    }));
-
-    // Generate slug
-    const slug = playlistDetails.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
-
     // Create course
-    const course = new Course({
-      title: playlistDetails.title,
-      description: playlistDetails.description || 'No description available',
-      thumbnail: playlistDetails.thumbnail,
-      playlistUrl,
-      playlistId,
-      creator: req.user._id,
-      modules,
-      category,
-      difficulty,
-      tags,
-      isPublic,
-      slug
-    });
-
+    const course = new Course(result.course);
     await course.save();
 
     res.status(201).json({
@@ -141,7 +108,8 @@ router.post('/convert', [
           totalDuration: course.totalDuration,
           totalXP: course.totalXP,
           slug: course.slug
-        }
+        },
+        stats: result.stats
       }
     });
   } catch (error) {
@@ -505,6 +473,96 @@ router.post('/:courseId/rate', [
       totalRatings: course.totalRatings
     }
   });
+}));
+
+// @route   POST /api/courses/preview
+// @desc    Get preview of course from YouTube playlist
+// @access  Private
+router.post('/preview', [
+  body('playlistUrl')
+    .notEmpty()
+    .withMessage('Playlist URL is required')
+    .custom((value) => {
+      if (!YouTubeService.validateYouTubeUrl(value)) {
+        throw new Error('Invalid YouTube playlist URL');
+      }
+      return true;
+    })
+], asyncHandler(async (req, res) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    console.log('Validation errors:', errors.array());
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+
+  if (!req.user) {
+    console.log('No user found in request');
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required'
+    });
+  }
+
+  const { playlistUrl } = req.body;
+  console.log('Preview request for URL:', playlistUrl);
+
+  try {
+    // Check if YouTube API key is available
+    if (!process.env.YOUTUBE_API_KEY) {
+      console.log('YouTube API key not found');
+      return res.status(500).json({
+        success: false,
+        message: 'YouTube API key not configured. Please contact administrator.'
+      });
+    }
+
+    // Get course preview
+    console.log('Calling YouTubeService.getCoursePreview...');
+    const result = await YouTubeService.getCoursePreview(playlistUrl);
+    console.log('YouTubeService result:', result);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.error
+      });
+    }
+
+    // Check if course already exists
+    const existingCourse = await Course.findOne({ playlistId: result.preview.playlistId });
+    if (existingCourse) {
+      return res.status(400).json({
+        success: false,
+        message: 'This playlist has already been converted to a course',
+        data: {
+          existingCourse: {
+            _id: existingCourse._id,
+            title: existingCourse.title,
+            slug: existingCourse.slug
+          }
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        preview: result.preview
+      }
+    });
+  } catch (error) {
+    console.error('Course preview error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get course preview',
+      error: error.message
+    });
+  }
 }));
 
 // @route   GET /api/courses/categories

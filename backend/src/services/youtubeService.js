@@ -3,10 +3,16 @@ import axios from 'axios';
 
 class YouTubeService {
   constructor() {
+    if (!process.env.YOUTUBE_API_KEY) {
+      console.warn('YouTube API key not found in environment variables');
+    }
+    
     this.youtube = google.youtube({
       version: 'v3',
       auth: process.env.YOUTUBE_API_KEY
     });
+    
+    console.log('YouTube service initialized with API key:', process.env.YOUTUBE_API_KEY ? 'Present' : 'Missing');
   }
   extractPlaylistId(url) {
     const patterns = [
@@ -25,17 +31,21 @@ class YouTubeService {
   }
   async getPlaylistDetails(playlistId) {
     try {
+      console.log('Fetching playlist details for ID:', playlistId);
+      
       const response = await this.youtube.playlists.list({
         part: ['snippet', 'contentDetails'],
         id: [playlistId]
       });
+
+      console.log('Playlist API response:', response.data);
 
       if (!response.data.items || response.data.items.length === 0) {
         throw new Error('Playlist not found');
       }
 
       const playlist = response.data.items[0];
-      return {
+      const details = {
         id: playlist.id,
         title: playlist.snippet.title,
         description: playlist.snippet.description,
@@ -45,13 +55,15 @@ class YouTubeService {
         videoCount: playlist.contentDetails.itemCount,
         publishedAt: playlist.snippet.publishedAt
       };
+      
+      console.log('Playlist details extracted:', details);
+      return details;
     } catch (error) {
       console.error('Error fetching playlist details:', error);
+      console.error('Error details:', error.response?.data || error.message);
       throw new Error('Failed to fetch playlist details');
     }
   }
-
-  // Get all videos from playlist
   async getPlaylistVideos(playlistId, maxResults = 50) {
     try {
       const videos = [];
@@ -107,8 +119,6 @@ class YouTubeService {
       throw new Error('Failed to fetch playlist videos');
     }
   }
-
-  // Get video details (duration, view count, etc.)
   async getVideoDetails(videoIds) {
     try {
       const response = await this.youtube.videos.list({
@@ -128,8 +138,6 @@ class YouTubeService {
       return [];
     }
   }
-
-  // Parse ISO 8601 duration to seconds
   parseDuration(duration) {
     const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
     
@@ -139,8 +147,6 @@ class YouTubeService {
     
     return hours * 3600 + minutes * 60 + seconds;
   }
-
-  // Format duration from seconds to readable string
   formatDuration(seconds) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -253,6 +259,156 @@ class YouTubeService {
     } catch (error) {
       console.error('Error fetching video info:', error);
       throw new Error('Failed to fetch video information');
+    }
+  }
+
+  // Create LMS course from YouTube playlist
+  async createCourseFromPlaylist(playlistUrl, creatorId, courseData = {}) {
+    try {
+      // Validate URL
+      if (!this.validateYouTubeUrl(playlistUrl)) {
+        throw new Error('Invalid YouTube playlist URL');
+      }
+
+      // Extract playlist ID
+      const playlistId = this.extractPlaylistId(playlistUrl);
+
+      // Get playlist details
+      const playlistDetails = await this.getPlaylistDetails(playlistId);
+
+      // Get playlist videos
+      const videos = await this.getPlaylistVideos(playlistId);
+
+      if (videos.length === 0) {
+        throw new Error('No videos found in playlist');
+      }
+
+      // Create course modules
+      const modules = videos.map((video, index) => ({
+        title: video.title,
+        description: video.description || 'No description available',
+        videoId: video.id,
+        videoUrl: video.videoUrl,
+        thumbnail: video.thumbnail,
+        duration: video.duration,
+        order: index + 1,
+        xpReward: 10
+      }));
+
+      // Generate slug
+      const slug = playlistDetails.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
+      // Calculate total duration in minutes
+      const totalDuration = Math.round(videos.reduce((total, video) => total + video.duration, 0) / 60);
+
+      // Calculate total XP
+      const totalXP = modules.reduce((total, module) => total + module.xpReward, 0);
+
+      // Prepare course data
+      const course = {
+        title: playlistDetails.title,
+        description: playlistDetails.description || 'No description available',
+        thumbnail: playlistDetails.thumbnail,
+        playlistUrl,
+        playlistId,
+        creator: creatorId,
+        modules,
+        totalModules: modules.length,
+        totalDuration,
+        totalXP,
+        category: courseData.category || 'other',
+        difficulty: courseData.difficulty || 'beginner',
+        tags: courseData.tags || [],
+        isPublic: courseData.isPublic !== undefined ? courseData.isPublic : true,
+        slug,
+        metaDescription: playlistDetails.description 
+          ? playlistDetails.description.substring(0, 300) 
+          : `Learn from ${playlistDetails.title} playlist with ${modules.length} videos`
+      };
+
+      return {
+        success: true,
+        course,
+        playlistDetails,
+        stats: {
+          totalVideos: videos.length,
+          totalDuration: this.formatDuration(totalDuration * 60),
+          totalXP,
+          channelTitle: playlistDetails.channelTitle,
+          channelId: playlistDetails.channelId
+        }
+      };
+
+    } catch (error) {
+      console.error('Error creating course from playlist:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // Get course preview data without creating the course
+  async getCoursePreview(playlistUrl) {
+    try {
+      console.log('getCoursePreview called with URL:', playlistUrl);
+      
+      // Validate URL
+      if (!this.validateYouTubeUrl(playlistUrl)) {
+        console.log('URL validation failed');
+        throw new Error('Invalid YouTube playlist URL');
+      }
+      console.log('URL validation passed');
+
+      // Extract playlist ID
+      const playlistId = this.extractPlaylistId(playlistUrl);
+      console.log('Extracted playlist ID:', playlistId);
+
+      // Get playlist details
+      console.log('Getting playlist details...');
+      const playlistDetails = await this.getPlaylistDetails(playlistId);
+      console.log('Playlist details:', playlistDetails);
+
+      // Get first few videos for preview
+      console.log('Getting playlist videos...');
+      const videos = await this.getPlaylistVideos(playlistId, 5);
+      console.log('Found videos:', videos.length);
+
+      if (videos.length === 0) {
+        throw new Error('No videos found in playlist');
+      }
+
+      // Calculate preview stats
+      const totalDuration = Math.round(videos.reduce((total, video) => total + video.duration, 0) / 60);
+      const totalXP = videos.length * 10; // 10 XP per video
+
+      const preview = {
+        title: playlistDetails.title,
+        description: playlistDetails.description,
+        thumbnail: playlistDetails.thumbnail,
+        channelTitle: playlistDetails.channelTitle,
+        videoCount: playlistDetails.videoCount,
+        sampleVideos: videos.slice(0, 3), // Show first 3 videos
+        estimatedDuration: this.formatDuration(totalDuration * 60),
+        estimatedXP: totalXP,
+        playlistId
+      };
+
+      console.log('Preview created successfully:', preview);
+      return {
+        success: true,
+        preview
+      };
+
+    } catch (error) {
+      console.error('Error getting course preview:', error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 }
