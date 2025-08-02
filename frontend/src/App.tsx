@@ -17,6 +17,7 @@ import Profile from './pages/Profile';
 import Leaderboard from './pages/Leaderboard';
 import Achievements from './pages/Achievements';
 import CreateCourse from './pages/CreateCourse';
+import TestAPI from './pages/TestAPI';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,9 @@ function App() {
                 <Route path="/courses" element={<Courses />} />
                 <Route path="/courses/:slug" element={<CourseDetail />} />
                 <Route path="/leaderboard" element={<Leaderboard />} />
+                
+                {/* Test Route for API Debugging */}
+                <Route path="/test-api" element={<TestAPI />} />
                 
                 {/* Protected Routes */}
                 <Route path="/dashboard" element={
